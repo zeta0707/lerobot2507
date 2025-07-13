@@ -216,6 +216,7 @@ class MotorsBus(abc.ABC):
     There are currently two implementations of this abstract class:
         - DynamixelMotorsBus
         - FeetechMotorsBus
+        - LewansoulMotorBus
 
     Note: This class may evolve in the future should we add support for other types of bus.
 
@@ -1217,3 +1218,23 @@ class MotorsBus(abc.ABC):
         for id_, value in ids_values.items():
             data = self._serialize_data(value, length)
             self.sync_writer.addParam(id_, data)
+
+    def send(
+        self, data_name: str, motor: str, value: int, *, num_retry: int = 0
+    ) -> dict[str, int]:
+        """Send a command to motors.
+        """
+        if not self.is_connected:
+            raise DeviceNotConnectedError(
+                f"{self.__class__.__name__}('{self.port}') is not connected. You need to run `{self.__class__.__name__}.connect()`."
+            )
+
+        id_ = self.motors[motor].id
+        if data_name == "Present_Position":
+            angle, comm, error = self.packet_handler.get_action(self.port_handler, id_)
+            #print("send->Present_Position:", id_, angle)
+            return {self._id_to_name(id_): angle}
+        elif data_name == "Goal_Position":
+            #print("send->Goal_Position:", id_, value)
+            result = self.packet_handler.set_action(self.port_handler, id_, value)     
+            return  {self._id_to_name(id_): value}
