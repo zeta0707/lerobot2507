@@ -106,32 +106,10 @@ class REBEARMFollower(Robot):
 
     def calibrate(self) -> None:
         logger.info(f"\nRunning calibration of {self}")
-        self.bus.disable_torque()
-        for motor in self.bus.motors:
-            self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
-
-        input(f"Move {self} to the middle of its range of motion and press ENTER....")
-        homing_offsets = self.bus.set_half_turn_homings()
-
         print(
-            "Move all joints sequentially through their entire ranges "
-            "of motion.\nRecording positions. Press ENTER to stop..."
+            "Just torque off, don't run calibration "
         )
-        range_mins, range_maxes = self.bus.record_ranges_of_motion()
-
-        self.calibration = {}
-        for motor, m in self.bus.motors.items():
-            self.calibration[motor] = MotorCalibration(
-                id=m.id,
-                drive_mode=0,
-                homing_offset=homing_offsets[motor],
-                range_min=range_mins[motor],
-                range_max=range_maxes[motor],
-            )
-
-        self.bus.write_calibration(self.calibration)
-        self._save_calibration()
-        print("Calibration saved to", self.calibration_fpath)
+        self.bus.disable_torque()
 
     def configure(self) -> None:
         print(
@@ -152,12 +130,17 @@ class REBEARMFollower(Robot):
         print(
             "follower->get_observation"
         )
-        # Read arm position
-        start = time.perf_counter()
-        obs_dict = self.bus.sync_read("Present_Position")
+        obs_dict = {}
+        for motor in self.bus.motors:
+            obs_each = self.bus.send("Present_Position", motor=motor, value=None)
+            #print(f'Motor {motor} - action_each: {action_each}')
+            if obs_each is not None:
+                obs_dict.update(obs_each) 
+            else:
+                print(f"Warning: Got None response for motor {motor}")
+        
+        # Add .pos suffix to all keys
         obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
-        dt_ms = (time.perf_counter() - start) * 1e3
-        logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
         # Capture images from cameras
         for cam_key, cam in self.cameras.items():
