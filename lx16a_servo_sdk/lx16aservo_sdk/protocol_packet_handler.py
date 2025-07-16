@@ -206,7 +206,7 @@ class protocol_packet_handler(object):
         if rxpacket[PKT_ID] == lx16a_id:
             angle = rxpacket[PKT_PARAMETER0] + rxpacket[PKT_PARAMETER0+1]* 256
             angle = angle - 65536 if angle > 32767 else angle
-            return int(angle), result, error
+            return angle, result, error
         
         return 0, result, error
     
@@ -223,3 +223,18 @@ class protocol_packet_handler(object):
         sleep(0.05)
         return result
 
+    def writeTxRx(self, port, lx16a_id, address, length, data):
+        #no need to run
+        if address == 0:
+            return 0, 0
+        
+        if data == -1:
+            txpacket= [lx16a_id, length + 3, address]
+        else:
+            #need to run, but change to txRxpacket instead of REG write
+            txpacket= [lx16a_id, length + 5, address, data]
+
+        #print("writeTxRx", txpacket)
+        rxpacket, result, error = self.txRxPacket(port, txpacket)
+
+        return result, error

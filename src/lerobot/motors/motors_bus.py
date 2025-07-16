@@ -1233,8 +1233,10 @@ class MotorsBus(abc.ABC):
         if data_name == "Present_Position":
             angle, comm, error = self.packet_handler.get_action(self.port_handler, id_)
             #print("send->Present_Position:", id_, angle)
+            angle = float(angle)
             return {self._id_to_name(id_): angle}
         elif data_name == "Goal_Position":
             #print("send->Goal_Position:", id_, value)
+            value = int(value)
             result = self.packet_handler.set_action(self.port_handler, id_, value)     
             return  {self._id_to_name(id_): value}
