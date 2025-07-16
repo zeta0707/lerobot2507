@@ -174,7 +174,10 @@ class REBEARMFollower(Robot):
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
         print('GoalPos:', goal_pos)
         for  motor, val in goal_pos.items():
+            val = int(val)  #change float to int
             self.bus.send("Goal_Position", motor=motor, value = val)
+
+        return {f"{motor}.pos": val for motor, val in goal_pos.items()}
     
     def disconnect(self):
         if not self.is_connected:
