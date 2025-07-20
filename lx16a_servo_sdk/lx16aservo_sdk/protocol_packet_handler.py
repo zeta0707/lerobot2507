@@ -25,6 +25,12 @@ def _checksum(packet: list[int]) -> int:
     s = ~sum(packet[2:])
     return s % 256
 
+def _to_servo_range(angle: float) -> int:
+    return round(angle * 25 / 6)
+
+def _from_servo_range(angle: int) -> float:
+    return angle * 6 / 25
+
 class protocol_packet_handler(object):
     def getProtocolVersion(self):
         return 1.0
@@ -68,7 +74,7 @@ class protocol_packet_handler(object):
             return "[RxPacketError] Overload error!"
 
         return ""
-    
+        
     def txPacket(self, port, txpacket):
         if port.is_using:
             return COMM_PORT_BUSY
@@ -204,30 +210,38 @@ class protocol_packet_handler(object):
 
         #return angle when id is correct
         if rxpacket[PKT_ID] == lx16a_id:
-            angle = rxpacket[PKT_PARAMETER0] + rxpacket[PKT_PARAMETER0+1]* 256
-            angle = angle - 65536 if angle > 32767 else angle
+            #value, 0 ~ 1000
+            value = rxpacket[PKT_PARAMETER0] + rxpacket[PKT_PARAMETER0+1]* 256
+            #angle shoud be 0 ~ 240.0
+            angle = _from_servo_range(value - 65536 if value > 32767 else value)
+            #120.0 is center
+            angle = angle - 120.0
             return angle, result, error
         
-        return 0, result, error
+        return 0.0, result, error
     
     def set_action(self, port, lx16a_id, angle):
-        time = 300
+        #motor move time
+        move_time = 300
 
-        if(angle > 1000):
-            angle = 1000
-        elif(angle < 0):
+        angle = angle + 120.0
+        if(angle < 0): 
             angle = 0
+        if(angle > 240.0):
+            angle = 240.0
 
-        txpacket = [lx16a_id, 7, 1, LX16A_LOBYTE(angle), LX16A_HIBYTE(angle), LX16A_LOBYTE(time), LX16A_HIBYTE(time)]
+        #value, 0 ~ 1000
+        value = _to_servo_range(angle)
+        txpacket = [lx16a_id, 7, 1, LX16A_LOBYTE(value), LX16A_HIBYTE(value), LX16A_LOBYTE(move_time), LX16A_HIBYTE(move_time)]
         result = self.txPacket(port, txpacket)
         sleep(0.05)
         return result
 
     def writeTxRx(self, port, lx16a_id, address, length, data):
-        #no need to run
+        #no need to run, dummy command
         if address == 0:
             return 0, 0
-        
+        #no parameter command, actually LX16 don't have this kind of command. 
         if data == -1:
             txpacket= [lx16a_id, length + 3, address]
         else:

@@ -96,7 +96,7 @@ class REBEARMLeader(Teleoperator):
     def setup_motors(self) -> None:
         for motor in reversed(self.bus.motors):
             input(f"Connect the controller board to the '{motor}' motor only and press enter.")
-            self.bus.setup_motor(motor, initial_baudrate = 115200, initial_id=6)
+            self.bus.setup_motor(motor, initial_baudrate = 115200, initial_id=self.bus.motors[motor].id)
             print(f"'{motor}' motor id set to {self.bus.motors[motor].id}")
 
     def get_action(self) -> dict[str, int]:
