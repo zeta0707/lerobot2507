@@ -23,12 +23,12 @@ from typing import Any
 import numpy as np
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.motors import Motor, MotorCalibration, MotorNormMode
 from lerobot.motors.feetech import (
     FeetechMotorsBus,
     OperatingMode,
 )
+from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
 from ..robot import Robot
 from ..utils import ensure_safe_goal_position
@@ -114,6 +114,9 @@ class LeKiwi(Robot):
 
         self.bus.connect()
         if not self.is_calibrated and calibrate:
+            logger.info(
+                "Mismatch between calibration values in the motor and the calibration file or no calibration file found"
+            )
             self.calibrate()
 
         for cam in self.cameras.values():
@@ -127,6 +130,15 @@ class LeKiwi(Robot):
         return self.bus.is_calibrated
 
     def calibrate(self) -> None:
+        if self.calibration:
+            # Calibration file exists, ask user whether to use it or run new calibration
+            user_input = input(
+                f"Press ENTER to use provided calibration file associated with the id {self.id}, or type 'c' and press ENTER to run calibration: "
+            )
+            if user_input.strip().lower() != "c":
+                logger.info(f"Writing calibration file associated with the id {self.id} to the motors")
+                self.bus.write_calibration(self.calibration)
+                return
         logger.info(f"\nRunning calibration of {self}")
 
         motors = self.arm_motors + self.base_motors
@@ -141,7 +153,7 @@ class LeKiwi(Robot):
         homing_offsets.update(dict.fromkeys(self.base_motors, 0))
 
         full_turn_motor = [
-            motor for motor in motors if any(keyword in motor for keyword in ["wheel", "wrist"])
+            motor for motor in motors if any(keyword in motor for keyword in ["wheel", "wrist_roll"])
         ]
         unknown_range_motors = [motor for motor in motors if motor not in full_turn_motor]
 
