@@ -19,7 +19,7 @@ from copy import deepcopy
 from enum import Enum
 from pprint import pformat
 
-from lerobot.utils.encoding_utils import decode_sign_magnitude, encode_sign_magnitude
+from lerobot.motors.encoding_utils import decode_sign_magnitude, encode_sign_magnitude
 
 from ..motors_bus import Motor, MotorCalibration, MotorsBus, NameOrID, Value, get_address
 

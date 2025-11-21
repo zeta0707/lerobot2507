@@ -17,12 +17,12 @@
 import logging
 import time
 
-from lerobot.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.motors import Motor, MotorCalibration, MotorNormMode
 from lerobot.motors.lewansol import (
     LewansoulMotorsBus,
 )
 
+from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from ..teleoperator import Teleoperator
 from .config_rebearm_leader import REBEARMLeaderConfig
 

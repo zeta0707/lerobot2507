@@ -52,8 +52,12 @@ def make_teleoperator_from_config(config: TeleoperatorConfig) -> Teleoperator:
     
     elif config.type == "rebearm_leader":
         from .rebearm_leader import REBEARMLeader
-
         return REBEARMLeader(config)
+    
+    elif config.type == "omx_leader":
+        from .omx_leader import OmxLeader
+        return OmxLeader(config)
+    
     elif config.type == "stretch3":
         from .stretch3_gamepad import Stretch3GamePad
 

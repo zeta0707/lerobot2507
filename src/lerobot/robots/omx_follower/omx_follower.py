@@ -1,0 +1,274 @@
+#!/usr/bin/env python
+
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import logging
+import time
+from functools import cached_property
+from typing import Any
+
+from lerobot.cameras.utils import make_cameras_from_configs
+from lerobot.motors import Motor, MotorCalibration, MotorNormMode
+from lerobot.motors.dynamixel import (
+    DynamixelMotorsBus,
+    OperatingMode,
+)
+from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
+
+from ..robot import Robot
+from ..utils import ensure_safe_goal_position
+from .config_omx_follower import OmxFollowerConfig
+
+logger = logging.getLogger(__name__)
+
+
+class OmxFollower(Robot):
+    """
+    OMX Robot
+    """
+
+    config_class = OmxFollowerConfig
+    name = "omx_follower"
+
+    def __init__(self, config: OmxFollowerConfig):
+        # Set default calibration directory to source code
+        if not config.calibration_dir:
+            from pathlib import Path
+            config.calibration_dir = Path(__file__).parent / "calibration"
+
+        super().__init__(config)
+        self.config = config
+        self.bus = DynamixelMotorsBus(
+            port=self.config.port,
+            motors={
+                "shoulder_pan": Motor(11, "xl430-w250", MotorNormMode.DEGREES),
+                "shoulder_lift": Motor(12, "xl430-w250", MotorNormMode.RANGE_M100_100),
+                "elbow_flex": Motor(13, "xl430-w250", MotorNormMode.RANGE_M100_100),
+                "wrist_flex": Motor(14, "xl330-m288", MotorNormMode.RANGE_M100_100),
+                "wrist_roll": Motor(15, "xl330-m288", MotorNormMode.DEGREES),
+                "gripper": Motor(16, "xl330-m288", MotorNormMode.RANGE_0_100),
+            },
+            calibration=self.calibration,
+        )
+        self.bus.apply_drive_mode = False
+        self.cameras = make_cameras_from_configs(config.cameras)
+
+    @property
+    def _motors_ft(self) -> dict[str, type]:
+        return {f"{motor}.pos": float for motor in self.bus.motors}
+
+    @property
+    def _cameras_ft(self) -> dict[str, tuple]:
+        return {
+            cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3) for cam in self.cameras
+        }
+
+    @cached_property
+    def observation_features(self) -> dict[str, type | tuple]:
+        return {**self._motors_ft, **self._cameras_ft}
+
+    @cached_property
+    def action_features(self) -> dict[str, type]:
+        return self._motors_ft
+
+    @property
+    def is_connected(self) -> bool:
+        return self.bus.is_connected and all(cam.is_connected for cam in self.cameras.values())
+
+    def connect(self, calibrate: bool = True) -> None:
+        """
+        We assume that at connection time, arm is in a rest position,
+        and torque can be safely disabled to run calibration.
+        """
+        if self.is_connected:
+            raise DeviceAlreadyConnectedError(f"{self} already connected")
+
+        self.bus.connect()
+        # Skip calibration and use pre-configured calibration file
+        if self.calibration:
+            logger.info(f"Using pre-configured calibration for {self}")
+            # Ensure EEPROM writes are permitted
+            self.bus.disable_torque()
+            self.bus.write_calibration(self.calibration)
+        elif not self.is_calibrated and calibrate:
+            logger.info(
+                "Mismatch between calibration values in the motor and the calibration file or no calibration file found"
+            )
+            self.calibrate()
+
+        for cam in self.cameras.values():
+            cam.connect()
+
+        self.configure()
+        logger.info(f"{self} connected.")
+
+    @property
+    def is_calibrated(self) -> bool:
+        return self.bus.is_calibrated
+
+    def calibrate(self) -> None:
+        if self.calibration:
+            # Calibration file exists, ask user whether to use it or run new calibration
+            user_input = input(
+                f"Press ENTER to use provided calibration file associated with the id {self.id}, or type 'c' and press ENTER to run calibration: "
+            )
+            if user_input.strip().lower() != "c":
+                logger.info(f"Writing calibration file associated with the id {self.id} to the motors")
+                self.bus.write_calibration(self.calibration)
+                return
+        logger.info(f"\nRunning calibration of {self}")
+        self.bus.disable_torque()
+        for motor in self.bus.motors:
+            self.bus.write("Operating_Mode", motor, OperatingMode.EXTENDED_POSITION.value)
+
+        input(f"Move {self} to the middle of its range of motion and press ENTER....")
+        homing_offsets = self.bus.set_half_turn_homings()
+
+        full_turn_motors = ["shoulder_pan", "wrist_roll"]
+        unknown_range_motors = [motor for motor in self.bus.motors if motor not in full_turn_motors]
+        print(
+            f"Move all joints except {full_turn_motors} sequentially through their entire "
+            "ranges of motion.\nRecording positions. Press ENTER to stop..."
+        )
+        range_mins, range_maxes = self.bus.record_ranges_of_motion(unknown_range_motors)
+        for motor in full_turn_motors:
+            range_mins[motor] = 0
+            range_maxes[motor] = 4095
+
+        self.calibration = {}
+        for motor, m in self.bus.motors.items():
+            # Set drive_mode=1 for elbow_flex to fix direction
+            drive_mode = 1 if motor == "elbow_flex" else 0
+            self.calibration[motor] = MotorCalibration(
+                id=m.id,
+                drive_mode=drive_mode,
+                homing_offset=homing_offsets[motor],
+                range_min=range_mins[motor],
+                range_max=range_maxes[motor],
+            )
+
+        self.bus.write_calibration(self.calibration)
+        self._save_calibration()
+        logger.info(f"Calibration saved to {self.calibration_fpath}")
+
+    def configure(self) -> None:
+        with self.bus.torque_disabled():
+            # First set operating modes per joint (EEPROM area requires torque disabled)
+            # dxl11 shoulder_pan -> 4 (EXTENDED_POSITION)
+            self.bus.write("Operating_Mode", "shoulder_pan", 4, normalize=False)
+            # dxl12 shoulder_lift -> 3 (POSITION)
+            self.bus.write("Operating_Mode", "shoulder_lift", 3, normalize=False)
+            # dxl13 elbow_flex -> 3 (POSITION)
+            self.bus.write("Operating_Mode", "elbow_flex", 3, normalize=False)
+            # dxl14 wrist_flex -> 3 (POSITION)
+            self.bus.write("Operating_Mode", "wrist_flex", 3, normalize=False)
+            # dxl15 wrist_roll -> 3 (POSITION)
+            self.bus.write("Operating_Mode", "wrist_roll", 3, normalize=False)
+            # dxl16 gripper -> 5 (CURRENT_POSITION)
+            self.bus.write("Operating_Mode", "gripper", 5, normalize=False)
+
+            # Common raw settings for all joints
+            for motor in self.bus.motors:
+                self.bus.write("Return_Delay_Time", motor, 0, normalize=False)
+                self.bus.write("Drive_Mode", motor, 4, normalize=False)
+                self.bus.write("Position_P_Gain", motor, 1000, normalize=False)
+                self.bus.write("Position_I_Gain", motor, 0, normalize=False)
+                self.bus.write("Position_D_Gain", motor, 1000, normalize=False)
+                self.bus.write("Profile_Velocity", motor, 50, normalize=False)
+                self.bus.write("Profile_Acceleration", motor, 25, normalize=False)
+
+            # Joint-specific position limits
+            self.bus.write("Min_Position_Limit", "shoulder_lift", 830, normalize=False)
+            self.bus.write("Max_Position_Limit", "shoulder_lift", 3129, normalize=False)
+
+            self.bus.write("Min_Position_Limit", "elbow_flex", 1024, normalize=False)
+            self.bus.write("Max_Position_Limit", "elbow_flex", 3140, normalize=False)
+
+            self.bus.write("Min_Position_Limit", "wrist_flex", 0, normalize=False)
+            self.bus.write("Max_Position_Limit", "wrist_flex", 4095, normalize=False)
+
+            self.bus.write("Min_Position_Limit", "wrist_roll", 0, normalize=False)
+            self.bus.write("Max_Position_Limit", "wrist_roll", 4095, normalize=False)
+
+            # Gripper current control and shutdown behavior
+            self.bus.write("Current_Limit", "gripper", 600, normalize=False)
+            self.bus.write("Goal_Current", "gripper", 600, normalize=False)
+            self.bus.write("Shutdown", "gripper", 21, normalize=False)
+
+    def setup_motors(self) -> None:
+        for motor in reversed(self.bus.motors):
+            input(f"Connect the controller board to the '{motor}' motor only and press enter.")
+            self.bus.setup_motor(motor)
+            print(f"'{motor}' motor id set to {self.bus.motors[motor].id}")
+
+    def get_observation(self) -> dict[str, Any]:
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        # Read arm position
+        start = time.perf_counter()
+        obs_dict = self.bus.sync_read("Present_Position")
+        obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
+        dt_ms = (time.perf_counter() - start) * 1e3
+        logger.debug(f"{self} read state: {dt_ms:.1f}ms")
+
+        # Capture images from cameras
+        for cam_key, cam in self.cameras.items():
+            start = time.perf_counter()
+            obs_dict[cam_key] = cam.async_read()
+            dt_ms = (time.perf_counter() - start) * 1e3
+            logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+
+        return obs_dict
+
+    def send_action(self, action: dict[str, float]) -> dict[str, float]:
+        """Command arm to move to a target joint configuration.
+
+        The relative action magnitude may be clipped depending on the configuration parameter
+        `max_relative_target`. In this case, the action sent differs from original action.
+        Thus, this function always returns the action actually sent.
+
+        Args:
+            action (dict[str, float]): The goal positions for the motors.
+
+        Returns:
+            dict[str, float]: The action sent to the motors, potentially clipped.
+        """
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
+
+        # Cap goal position when too far away from present position.
+        # /!\ Slower fps expected due to reading from the follower.
+        if self.config.max_relative_target is not None:
+            present_pos = self.bus.sync_read("Present_Position")
+            goal_present_pos = {key: (g_pos, present_pos[key]) for key, g_pos in goal_pos.items()}
+            goal_pos = ensure_safe_goal_position(goal_present_pos, self.config.max_relative_target)
+
+        # Send goal position to the arm
+        self.bus.sync_write("Goal_Position", goal_pos)
+
+        return {f"{motor}.pos": val for motor, val in goal_pos.items()}
+
+    def disconnect(self):
+        if not self.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        self.bus.disconnect(self.config.disable_torque_on_disconnect)
+        for cam in self.cameras.values():
+            cam.disconnect()
+
+        logger.info(f"{self} disconnected.")
