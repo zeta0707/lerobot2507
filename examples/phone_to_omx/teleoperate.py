@@ -41,7 +41,7 @@ FPS = 30
 robot_config = OmxFollowerConfig(
     port="/dev/ttyACM0", id="my_awesome_follower_arm", use_degrees=True
 )
-teleop_config = PhoneConfig(phone_os=PhoneOS.IOS)  # or PhoneOS.ANDROID
+teleop_config = PhoneConfig(phone_os=PhoneOS.ANDROID)  # or PhoneOS.ANDROID
 
 # Initialize the robot and teleoperator
 robot = OmxFollower(robot_config)
@@ -49,7 +49,7 @@ teleop_device = Phone(teleop_config)
 
 # NOTE: It is highly recommended to use the urdf in the SO-ARM100 repo: https://github.com/TheRobotStudio/SO-ARM100/blob/main/Simulation/SO101/so101_new_calib.urdf
 kinematics_solver = RobotKinematics(
-    urdf_path="./SO101/so101_new_calib.urdf",
+    urdf_path="./urdf",
     target_frame_name="gripper_frame_link",
     joint_names=list(robot.bus.motors.keys()),
 )

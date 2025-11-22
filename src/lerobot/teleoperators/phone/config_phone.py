@@ -30,7 +30,7 @@ class PhoneOS(Enum):
 @TeleoperatorConfig.register_subclass("phone")
 @dataclass
 class PhoneConfig(TeleoperatorConfig):
-    phone_os: PhoneOS = PhoneOS.IOS
+    phone_os: PhoneOS = PhoneOS.ANDROID
     camera_offset = np.array(
         [0.0, -0.02, 0.04]
     )  # iPhone 14 Pro camera is 2cm off center and 4cm above center
