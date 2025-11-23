@@ -23,11 +23,12 @@ from lerobot.processor.converters import (
     robot_action_observation_to_transition,
     transition_to_robot_action,
 )
-from lerobot.robots.omx_follower.config_omx_follower import OmxFollowerConfig
-from lerobot.robots.omx_follower.robot_kinematic_processor import (
+from lerobot.robots.rebearm_follower.config_rebearm_follower import REBEARMFollowerConfig
+# need to use own robot_kinematic_processor ??
+from lerobot.robots.so100_follower.robot_kinematic_processor import (
     InverseKinematicsEEToJoints,
 )
-from lerobot.robots.so100_follower.so100_follower import OmxFollower
+from lerobot.robots.rebearm_follower.rebearm_follower import REBEARMFollower
 from lerobot.utils.constants import ACTION
 from lerobot.utils.robot_utils import busy_wait
 from lerobot.utils.utils import log_say
@@ -36,14 +37,14 @@ EPISODE_IDX = 0
 HF_REPO_ID = "<hf_username>/<dataset_repo_id>"
 
 # Initialize the robot config
-robot_config = OmxFollowerConfig(
-    port="/dev/ttyACM0", id="omx_follower_phone", use_degrees=True
+robot_config = REBEARMFollowerConfig(
+    port="/dev/ttyUSB0", id="rebearm_follower_phone", use_degrees=True
 )
 
 # Initialize the robot
-robot = OmxFollower(robot_config)
+robot = REBEARMFollower(robot_config)
 
-# NOTE: It is highly recommended to use the urdf in the OpenManipulator repo: https://github.com/ROBOTIS-GIT/open_manipulator/tree/main/open_manipulator_description/urdf
+# NOTE: It is highly recommended to use the urdf in the OpenManipulator repo: https://github.com/zeta0707/rebearm/tree/main/rebearm_description/xacro
 kinematics_solver = RobotKinematics(
     urdf_path="./urdf",
     target_frame_name="gripper_frame_link",

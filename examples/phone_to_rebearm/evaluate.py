@@ -35,12 +35,13 @@ from lerobot.processor.converters import (
     transition_to_robot_action,
 )
 
-from lerobot.robots.omx_follower.config_omx_follower import OmxFollowerConfig
-from lerobot.robots.omx_follower.robot_kinematic_processor import (
+from lerobot.robots.rebearm_follower.config_rebearm_follower import REBEARMFollowerConfig
+# need to use own robot_kinematic_processor ??
+from lerobot.robots.so100_follower.robot_kinematic_processor import (
     ForwardKinematicsJointsToEE,
     InverseKinematicsEEToJoints,
 )
-from lerobot.robots.omx_follower.omx_follower import OmxFollower
+from lerobot.robots.rebearm_follower.rebearm_follower import REBEARMFollower
 from lerobot.scripts.lerobot_record import record_loop
 from lerobot.utils.control_utils import init_keyboard_listener
 from lerobot.utils.utils import log_say
@@ -55,9 +56,9 @@ HF_DATASET_ID = "<hf_username>/<dataset_repo_id>"
 
 # Create the robot configuration & robot
 camera_config = {"front": OpenCVCameraConfig(index_or_path=0, width=640, height=480, fps=FPS)}
-robot_config = OmxFollowerConfig(
-    port="/dev/ttyACM0",
-    id="omx_follower_phone",
+robot_config = REBEARMFollowerConfig(
+    port="/dev/ttyUSB0",
+    id="rebearm_follower_phone",
     cameras=camera_config,
     use_degrees=True,
 )
@@ -67,7 +68,7 @@ robot = OmxFollower(robot_config)
 # Create policy
 policy = ACTPolicy.from_pretrained(HF_MODEL_ID)
 
-# NOTE: It is highly recommended to use the urdf in the OpenManipulator repo: https://github.com/ROBOTIS-GIT/open_manipulator/tree/main/open_manipulator_description/urdf
+# NOTE: It is highly recommended to use the urdf in the OpenManipulator repo: https://github.com/zeta0707/rebearm/tree/main/rebearm_description/xacro
 kinematics_solver = RobotKinematics(
     urdf_path="./urdf",
     target_frame_name="gripper_frame_link",

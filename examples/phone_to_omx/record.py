@@ -27,7 +27,7 @@ from lerobot.processor.converters import (
     transition_to_robot_action,
 )
 from lerobot.robots.omx_follower.config_omx_follower import OmxFollowerConfig
-from lerobot.robots.so100_follower.robot_kinematic_processor import (
+from lerobot.robots.omx_follower.robot_kinematic_processor import (
     EEBoundsAndSafety,
     EEReferenceAndDelta,
     ForwardKinematicsJointsToEE,
@@ -54,7 +54,7 @@ HF_REPO_ID = "<hf_username>/<dataset_repo_id>"
 camera_config = {"front": OpenCVCameraConfig(index_or_path=0, width=640, height=480, fps=FPS)}
 robot_config = OmxFollowerConfig(
     port="/dev/ttyACM0",
-    id="my_awesome_follower_arm",
+    id="omx_follower_phone",
     cameras=camera_config,
     use_degrees=True,
 )
@@ -64,7 +64,7 @@ teleop_config = PhoneConfig(phone_os=PhoneOS.ANDROID)  # or PhoneOS.ANDROID
 robot = OmxFollower(robot_config)
 phone = Phone(teleop_config)
 
-# NOTE: It is highly recommended to use the urdf in the SO-ARM100 repo: https://github.com/TheRobotStudio/SO-ARM100/blob/main/Simulation/SO101/so101_new_calib.urdf
+# NOTE: It is highly recommended to use the urdf in the OpenManipulator repo: https://github.com/ROBOTIS-GIT/open_manipulator/tree/main/open_manipulator_description/urdf
 kinematics_solver = RobotKinematics(
     urdf_path="./urdf",
     target_frame_name="gripper_frame_link",

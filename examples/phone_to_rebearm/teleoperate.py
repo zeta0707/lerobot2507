@@ -21,14 +21,15 @@ from lerobot.processor.converters import (
     robot_action_observation_to_transition,
     transition_to_robot_action,
 )
-from lerobot.robots.omx_follower.config_omx_follower import OmxFollowerConfig
-from lerobot.robots.omx_follower.robot_kinematic_processor import (
+from lerobot.robots.rebearm_follower.config_rebearm_follower import REBEARMFollowerConfig
+# need to use own robot_kinematic_processor ??
+from lerobot.robots.so100_follower.robot_kinematic_processor import (
     EEBoundsAndSafety,
     EEReferenceAndDelta,
     GripperVelocityToJoint,
     InverseKinematicsEEToJoints,
 )
-from lerobot.robots.omx_follower.omx_follower import OmxFollower
+from lerobot.robots.rebearm_follower.rebearm_follower import REBEARMFollower
 from lerobot.teleoperators.phone.config_phone import PhoneConfig, PhoneOS
 from lerobot.teleoperators.phone.phone_processor import MapPhoneActionToRobotAction
 from lerobot.teleoperators.phone.teleop_phone import Phone
@@ -38,16 +39,16 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 FPS = 30
 
 # Initialize the robot and teleoperator
-robot_config = OmxFollowerConfig(
-    port="/dev/ttyACM0", id="omx_follower_phone", use_degrees=True
+robot_config = REBEARMFollowerConfig(
+    port="/dev/ttyUSB0", id="rebearm_follower_phone", use_degrees=True
 )
 teleop_config = PhoneConfig(phone_os=PhoneOS.ANDROID)  # or PhoneOS.ANDROID
 
 # Initialize the robot and teleoperator
-robot = OmxFollower(robot_config)
+robot = REBEARMFollower(robot_config)
 teleop_device = Phone(teleop_config)
 
-# NOTE: It is highly recommended to use the urdf in the OpenManipulator repo: https://github.com/ROBOTIS-GIT/open_manipulator/tree/main/open_manipulator_description/urdf
+# NOTE: It is highly recommended to use the urdf in the OpenManipulator repo: https://github.com/zeta0707/rebearm/tree/main/rebearm_description/xacro
 kinematics_solver = RobotKinematics(
     urdf_path="./urdf",
     target_frame_name="gripper_frame_link",
